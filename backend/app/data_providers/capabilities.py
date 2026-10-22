@@ -23,7 +23,11 @@ usable 契约: 每个能力额外给出 usable = 生效源当前能否真正提�
 
 from __future__ import annotations
 
+import logging
+
 from app.data_providers import custom as custom_sources
+
+logger = logging.getLogger(__name__)
 
 CAPABILITY_REGISTRY: list[dict] = [
     {
@@ -86,6 +90,14 @@ CAPABILITY_REGISTRY: list[dict] = [
         # TickFlow 侧需 Expert 档; 插件/自定义源声明 full_minute 数据集即可提供
         # (插件实现 get_intraday_batch / 可选 get_intraday_latest, YAML 仅修复轮)
     },
+    {
+        "id": "fund_flow",
+        "label": "资金流向",
+        "desc": "标准化资金流入、流出与净额 (窗口由数据源声明)",
+        "field": "fund_flow_data_provider",
+        "default": "akshare_ths",
+        "tf_tier": None,  # TickFlow 不提供该数据集，不得生成虚假候选
+    },
 ]
 
 _TICKFLOW_CANDIDATE = {
@@ -143,6 +155,20 @@ def _display_of(sources: list[dict], name: str) -> str:
     return name
 
 
+def _fund_flow_details(source: str) -> dict | None:
+    from app.data_providers.fund_flow import capabilities_of
+
+    try:
+        if not custom_sources.provider_has_dataset(source, "fund_flow"):
+            return None
+        return capabilities_of(custom_sources.get_provider(source)).model_dump(mode="json")
+    except (KeyError, ValueError):
+        return None
+    except Exception as exc:  # noqa: BLE001 — optional provider metadata cannot break the matrix
+        logger.warning("fund-flow metadata failed: source=%s kind=%s", source, type(exc).__name__)
+        return None
+
+
 def build_capability_matrix(current: dict[str, str], tickflow_tier: str = "none") -> dict:
     """注册表 + 源能力声明 + 当前偏好 → 能力路由矩阵。
 
@@ -163,7 +189,7 @@ def build_capability_matrix(current: dict[str, str], tickflow_tier: str = "none"
     for cap in CAPABILITY_REGISTRY:
         # field=None → 不可路由能力 (仅 TickFlow 提供, 无路由偏好), 生效源恒为默认
         effective = current.get(cap["field"], cap["default"]) if cap["field"] else cap["default"]
-        tf_available = tier_rank >= _TIER_RANK[cap["tf_tier"]]
+        tf_available = cap["tf_tier"] is not None and tier_rank >= _TIER_RANK[cap["tf_tier"]]
         candidates: list[dict] = []
         pending: list[dict] = []
         if tf_available:
@@ -180,6 +206,11 @@ def build_capability_matrix(current: dict[str, str], tickflow_tier: str = "none"
                 "note": None if s["available"] else (s["status"] or "不可用"),
             }
             (candidates if s["available"] else pending).append(entry)
+        details = _fund_flow_details(effective) if cap["id"] == "fund_flow" else None
+        if cap["id"] == "fund_flow":
+            pending.extend(dict(c, available=False, note="资金流契约未实现或版本不兼容")
+                           for c in candidates if _fund_flow_details(c["name"]) is None)
+            candidates = [c for c in candidates if _fund_flow_details(c["name"]) is not None]
         usable = any(c["name"] == effective for c in candidates)
         capabilities.append({
             "id": cap["id"],
@@ -196,6 +227,7 @@ def build_capability_matrix(current: dict[str, str], tickflow_tier: str = "none"
             "effective_display": _display_of(sources, effective),
             "candidates": candidates,
             "pending": pending,
+            **({"details": details} if cap["id"] == "fund_flow" else {}),
         })
     return {"tickflow_tier": tier_base, "capabilities": capabilities}
 
@@ -224,6 +256,7 @@ def _current_routing() -> dict[str, str]:
         "depth5_data_provider": preferences.get_depth5_data_provider(),
         "adj_factor_provider": preferences.get_adj_factor_provider(),
         "financial_data_provider": preferences.get_financial_provider(),
+        "fund_flow_data_provider": preferences.get_fund_flow_provider(),
     }
 
 
@@ -247,12 +280,14 @@ def resolve_capability_sources(tickflow_tier: str = "none") -> list[dict]:
         if not field:
             continue
         effective = current.get(field, cap["default"])
-        tf_available = tier_rank >= _TIER_RANK[cap["tf_tier"]]
+        tf_available = cap["tf_tier"] is not None and tier_rank >= _TIER_RANK[cap["tf_tier"]]
         provider_names = {"tickflow"} if tf_available else set()
         provider_names |= {
             s["name"] for s in sources
             if cap["id"] in s["datasets"] and s["available"]
         }
+        if cap["id"] == "fund_flow":
+            provider_names = {n for n in provider_names if _fund_flow_details(n) is not None}
         rows.append({
             "id": cap["id"],
             "label": cap["label"],

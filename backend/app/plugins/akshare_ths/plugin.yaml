@@ -1,0 +1,14 @@
+name: akshare_ths
+display_name: "同花顺资金流 (AKShare)"
+runtime: python
+entry: app.plugins.akshare_ths.provider:AkshareThsProvider
+check: app.plugins.akshare_ths.provider:availability
+datasets: [fund_flow]
+description: "同花顺公开行业、概念资金流：当天及近3/5/10/20日来源预设窗口。提供流入、流出和净额，不等同主力资金。"
+install_hint: "在本卡片安装可选依赖 AKShare 1.18.84，无需 API Key"
+homepage: "https://akshare.akfamily.xyz/data/stock/stock.html"
+usage_notes:
+  - "金额统一为人民币元；多日窗口沿用同花顺口径，不承诺任意历史日期或分钟区间。"
+  - "来源未披露精确数据时间；页面单独标明抓取时间，不代表逐笔实时。"
+  - "完整翻页后发布快照；分页失败保留上轮完整结果。建议刷新间隔至少60秒。"
+  - "依赖在隔离子进程执行，单次上限45秒；支持源码及Docker Python运行环境。"

@@ -16,6 +16,8 @@ export const QK = {
   preferences:    ['preferences'] as const,
   dataSources:    ['data-sources'] as const,
   capabilityMatrix: ['capability-matrix'] as const,
+  fundFlow: (source: string, taxonomy: string, basis: string, subjectType: string, window: string, date: string, ids: readonly string[] = [], granularity = 'snapshot') =>
+    ['fund-flow', source, taxonomy, basis, subjectType, window, date, [...new Set(ids)].sort(), granularity] as const,
   quoteStatus:    ['quote-status'] as const,
   quoteInterval:  ['quote-interval'] as const,
   overviewMarket: (asOf?: string) => ['overview-market', asOf ?? 'latest'] as const,

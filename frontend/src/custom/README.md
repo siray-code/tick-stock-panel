@@ -19,6 +19,7 @@ frontend/src/custom/<namespace>/extension.tsx
 | `limit-ladder` | 连板梯队 |
 | `concept-analysis` | 概念分析 |
 | `industry-analysis` | 行业分析 |
+| `fund-flow` | 资金流向（可选资金流数据源、独立路由） |
 | `financials` | 财务分析 |
 | `monitor` | 监控中心 |
 | `abnormal` | 异动监控 |

@@ -314,6 +314,12 @@ uv run --extra dev python -m ruff check app/plugins/<your_plugin>/ tests/test_<y
 
 ## 现有插件参考
 
+- **`backend/app/plugins/akshare_ths/`** — 可选 AKShare 1.18.84 同花顺公开资金流。
+  提供标准 `fund_flow` 数据集：行业／概念，当天及近 3/5/10/20 日来源预设窗口。
+  设置 → 数据源安装插件依赖后即可使用独立「资金流向」页；无需 Key。
+  依赖只在可终止子进程中导入，单次 45 秒，源请求串行；完整翻页校验成功才发布快照。
+  支持源码及 Docker Python 环境；打包桌面版暂不声明此插件可用。
+
 - **`backend/app/plugins/free_cn/`** — 新浪免费公开行情，使用已有 httpx，无需 Key。
   提供 `adj_factor/realtime/minute/depth5/full_minute`；实时股票由 Market_Center 枚举，再批量获取带日期时间的同源报价；指数按需补拉，量额暂空，不覆盖 ETF 全市场快照。
   分钟最多 1023 根、声明 `minute_history_days = 4`，成交额为空，仅实现当日全量分钟修复轮。实时建议间隔至少 60 秒，全市场分钟逐标的取数仍需十几至几十分钟。
@@ -339,3 +345,93 @@ uv run --extra dev python -m ruff check app/plugins/<your_plugin>/ tests/test_<y
 
 注册后, 插件和用户 YAML 自定义源走**完全相同的路由路径**(services 层的
 `provider_has_dataset` / `get_provider` 调用), 无需额外集成代码。
+
+## 资金流数据集 `fund_flow` v1
+
+稳定契约定义在 `app.data_providers.fund_flow`。它是独立可选协议，已有行情源不需要
+增加空实现。首版开放 **Python 插件接入**；通用 YAML HTTP 映射器暂未支持此数据集，
+不能仅在 YAML 中填写 `fund_flow` 就声称已接入。
+
+插件必须同时满足：
+
+1. `plugin.yaml` 的 `datasets` 及 `provider.config.datasets` 声明 `fund_flow`。
+2. 暴露只读的 `fund_flow_capabilities: FundFlowCapabilities`。
+3. 实现 `get_fund_flow(query: FundFlowQuery) -> FundFlowBatch`。
+4. 通过 `validate_batch` 和相应契约测试；声明但未实现、版本不兼容的源不进入可用候选。
+
+### 能力与请求
+
+`FundFlowCapabilities` 声明 `api_version=1`、`taxonomy`（分类体系命名空间）、
+`metric_basis`（统计方法的稳定标识）、`metric_label`（用户可理解的口径名称）、
+`subject_types`（`stock/industry/concept`）、`windows`、`granularities`、
+`amount_fields` 和 `refresh_interval_s`（至少 60 秒）。只声明确实能提供的组合，
+不允许把“只有主力净额”标成“完整流入／流出”。一组能力中的标的类型、窗口和粒度
+按笛卡尔积解释；不能支持该组合的源应拆分能力来源，不要过度声明。
+
+`FundFlowQuery` 包含 `subject_type`、`window_id`、可选 `subject_ids`（最多 200 个代码）
+和 `granularity`（默认 `snapshot`；协议保留 `1d/1m`，当前适配未开放）。窗口由能力声明
+驱动，调用方不硬编码供应商窗口。`FundFlowWindow` 的 `basis` 为
+`source_defined/trading_days/calendar_days`，已知的 `start/end` 必须带时区；未知时保留
+`null`，不能从“近5日”擅自推算自然日、交易日或是否包含当天。
+
+### 标准数据与校验
+
+`FundFlowBatch` 返回 Polars `frame`、`source`、原始 `query`、能力声明、
+`fetched_at`、可空的 `source_updated_at`、`amount_precision`、`complete` 和可选
+`expected_rows`。所有金额固定为 **人民币元**，精度也是元；百分比为 **小数**。
+时间必须带时区，界面统一按北京时间显示；抓取时刻不替代源数据时刻。
+
+标准 frame 列：
+
+| 字段 | 契约 |
+| --- | --- |
+| `source_subject_key` | 来源内唯一记录键，只用于该来源、分类体系、标的类型内识别记录。 |
+| `subject_id` | 分类体系内的真实代码；缺失为 `null`。跨模块关联必须同时带 `taxonomy` 和 `subject_type`，不能按名称猜代码。 |
+| `name` | 展示名称；名称不作为跨源身份。 |
+| `inflow_amount/outflow_amount` | 非负金额；未提供时为 `null`，不补零。 |
+| `net_amount` | 有符号净额；仅在声明支持净额、净额缺失且流入和流出齐全时推导。 |
+| `change_pct` | 可空小数比例，例如 `0.005` 表示 `0.5%`。 |
+| `member_count` | 可空非负整数。 |
+
+禁止 NaN、Infinity、重复记录键或重复非空代码。来源已有净额须保留；与流入减流出
+的差异最多允许 `1.5 × amount_precision` 的独立舍入误差。异常金额、字段缺失、
+分页缺口或数量不符应抛异常，不能以成功空表掩盖失败。完整、真实空批次可返回空表。
+超时、限流和授权错误不得静默切换数据源或统计口径。
+
+同花顺适配原值为亿元、两位小数，因此乘 `100000000`，`amount_precision=1000000`。
+分类代码目录不一定覆盖全部新概念：未匹配记录保留展示，`subject_id=null`，
+不参与按代码关联。当前来源不披露精确更新时间及预设窗口起止时间，均保留为空。
+它的公开资金指标不等同于逐笔追踪，也不擅自命名为主力资金。
+
+### 其他模块如何复用
+
+```python
+from app.data_providers.fund_flow import FundFlowQuery
+from app.services.fund_flow import get_fund_flow
+
+result = get_fund_flow(FundFlowQuery(
+    subject_type="industry", window_id="today", subject_ids=("881155",),
+))
+if result["status"] in {"ok", "stale"}:
+    rows = result["rows"]
+```
+
+调用前从 `/api/settings/capability-matrix` 中 `fund_flow` 的 `details` 或生效 provider
+能力声明读取支持窗口。后端统一入口负责独立路由（`fund_flow_data_provider`）、门控、
+校验和共享快照；业务代码不导入 AKShare 或特定插件，也不自行实现另一个缓存。
+
+HTTP 出口为 `GET /api/fund-flow?subject_type=industry&window_id=today`，
+`subject_ids` 使用重复查询参数。返回 `FundFlowResponse`：`ok/no_data/stale/error/`
+`source_unavailable/unsupported`，以及来源、查询上下文、能力描述、窗口、时间、
+人民币精度和标准记录。非法参数返回 422；无能力和上游失败通过明确状态表达。
+
+缓存按来源实例、契约与能力描述、类型、窗口、粒度及北京时间日期隔离，最多 32 个
+快照；同一查询并发合并，标的子集共享全量快照后按真实代码过滤，不产生逐卡上游请求。
+刷新失败保留上轮完整快照并标记 `stale`；错误也短期缓存，避免持续冲击失败来源。
+换源、插件重载或跨日不会复用其他上下文。此数据集仅维护进程内快照，不写 Parquet，
+不触发既有行情 SSE；前端独立查询键和页面可见时的交易时段轮询消费它。
+
+同一版本只允许兼容新增；更改单位、窗口或统计方法语义须升级契约版本或口径标识。
+新增来源需覆盖金额与时间标准化、缺字段／空值、能力缺失、分页失败、重复身份、
+缓存隔离及服务复用测试。可参考 `tests/test_fund_flow.py` 和
+`tests/test_akshare_ths_fund_flow.py`。

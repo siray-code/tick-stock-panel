@@ -1993,6 +1993,7 @@ export type ProviderField =
   | 'depth5_data_provider'
   | 'realtime_data_provider'
   | 'financial_data_provider'
+  | 'fund_flow_data_provider'
 
 /** 能力路由矩阵中的一个候选源 (candidates 只含当前确实可提供该能力的源) */
 export interface CapabilityCandidate {
@@ -2011,7 +2012,7 @@ export interface CapabilityRoute {
   desc: string
   field: ProviderField | null                    // null = 不可路由能力 (仅 TickFlow 提供)
   default: string
-  tf_tier: string                                  // TickFlow 所需最低订阅档位
+  tf_tier: string | null                           // null = TickFlow 不提供
   tf_available: boolean                            // 当前 TickFlow 档位是否提供该能力
   usable: boolean                                  // 生效源当前能否真正提供 (各页能力门控的统一判定)
   current: string                                  // 原始偏好值
@@ -2020,6 +2021,58 @@ export interface CapabilityRoute {
   effective_display: string
   candidates: CapabilityCandidate[]                // 当前可用候选 (按当前 TickFlow 档位过滤)
   pending: CapabilityCandidate[]                   // 声明了该能力但未就绪的源 (置灰提示)
+  details?: FundFlowCapabilities | null            // fund_flow 的标准能力描述
+}
+
+export type FundFlowSubjectType = 'stock' | 'industry' | 'concept'
+export interface FundFlowWindow {
+  id: string
+  label: string
+  basis: 'source_defined' | 'trading_days' | 'calendar_days'
+  start: string | null
+  end: string | null
+}
+export interface FundFlowCapabilities {
+  api_version: 1
+  taxonomy: string
+  metric_basis: string
+  metric_label: string
+  subject_types: FundFlowSubjectType[]
+  windows: FundFlowWindow[]
+  granularities: ('snapshot' | '1d' | '1m')[]
+  amount_fields: ('inflow_amount' | 'outflow_amount' | 'net_amount')[]
+  refresh_interval_s: number
+}
+export interface FundFlowQuery {
+  subject_type: FundFlowSubjectType
+  window_id: string
+  subject_ids?: string[]
+  granularity?: 'snapshot' | '1d' | '1m'
+}
+export interface FundFlowRow {
+  source_subject_key: string
+  subject_id: string | null
+  name: string
+  inflow_amount: number | null
+  outflow_amount: number | null
+  net_amount: number | null
+  change_pct: number | null
+  member_count: number | null
+}
+export interface FundFlowResponse {
+  api_version: 1
+  status: 'ok' | 'no_data' | 'stale' | 'error' | 'source_unavailable' | 'unsupported'
+  source: string
+  query: FundFlowQuery
+  capabilities: FundFlowCapabilities | null
+  window: FundFlowWindow | null
+  fetched_at: string | null
+  source_updated_at: string | null
+  amount_precision: number | null
+  currency: 'CNY'
+  complete: boolean
+  rows: FundFlowRow[]
+  message: string | null
 }
 
 export interface CapabilityMatrix {
@@ -2126,6 +2179,7 @@ export interface Preferences {
   depth5_data_provider?: string
   realtime_data_provider?: string
   financial_data_provider?: string
+  fund_flow_data_provider?: string
   data_source_job_timeout_s: number
   data_source_long_job_timeout_s: number
   minute_batch_compress: boolean
@@ -2422,6 +2476,11 @@ export const api = {
   preferences: () => request<Preferences>('/api/settings/preferences'),
   dataSources: () => request<DataSourcesResponse>('/api/settings/data-sources'),
   capabilityMatrix: () => request<CapabilityMatrix>('/api/settings/capability-matrix'),
+  fundFlow: (query: FundFlowQuery) => {
+    const params = new URLSearchParams({ subject_type: query.subject_type, window_id: query.window_id, granularity: query.granularity ?? 'snapshot' })
+    for (const id of [...new Set(query.subject_ids ?? [])].sort()) params.append('subject_ids', id)
+    return request<FundFlowResponse>(`/api/fund-flow?${params}`, { timeoutMs: 55_000, quiet: true })
+  },
   dataSource: (name: string) => request<CustomSourceConfig>(`/api/settings/data-sources/${encodeURIComponent(name)}`),
   saveDataSource: (config: CustomSourceConfig) =>
     request<DataSourcesResponse>('/api/settings/data-sources', {

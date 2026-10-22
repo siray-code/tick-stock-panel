@@ -21,6 +21,7 @@ DEFAULT_CURRENT = {
     "depth5_data_provider": "tickflow",
     "realtime_data_provider": "tickflow",
     "financial_data_provider": "tickflow",
+    "fund_flow_data_provider": "akshare_ths",
 }
 
 
@@ -40,14 +41,14 @@ def test_registry_covers_all_routing_fields():
     assert sorted(routable) == sorted(DEFAULT_CURRENT)
     assert len(set(routable)) == len(routable)
     assert {c["id"] for c in CAPABILITY_REGISTRY} == {
-        "realtime", "daily", "minute", "full_minute", "depth5", "adj_factor", "financial",
+        "realtime", "daily", "minute", "full_minute", "depth5", "adj_factor", "financial", "fund_flow",
     }
     full_minute = next(c for c in CAPABILITY_REGISTRY if c["id"] == "full_minute")
     assert full_minute["field"] == "full_minute_data_provider"
     assert full_minute["tf_tier"] == "expert"
     for cap in CAPABILITY_REGISTRY:
-        assert cap["default"] == "tickflow"
-        assert cap["tf_tier"] in ("none", "starter", "pro", "expert")
+        assert cap["default"] == ("akshare_ths" if cap["id"] == "fund_flow" else "tickflow")
+        assert cap["tf_tier"] in (None, "none", "starter", "pro", "expert")
         assert "follow" not in cap
 
 
@@ -56,8 +57,13 @@ def test_matrix_without_third_party_sources(monkeypatch):
     _fake_sources(monkeypatch, [])
     matrix = build_capability_matrix(dict(DEFAULT_CURRENT), tickflow_tier="expert")
     assert matrix["tickflow_tier"] == "expert"
-    assert len(matrix["capabilities"]) == 7
+    assert len(matrix["capabilities"]) == 8
     for cap in matrix["capabilities"]:
+        if cap["id"] == "fund_flow":
+            assert cap["candidates"] == []
+            assert cap["tf_tier"] is None and not cap["tf_available"]
+            assert not cap["usable"]
+            continue
         names = [c["name"] for c in cap["candidates"]]
         assert names == ["tickflow"]
         assert cap["candidates"][0]["kind"] == "builtin"
@@ -289,6 +295,7 @@ def test_api_endpoint_injects_all_routing_preferences(monkeypatch):
         "depth5_data_provider": "d5-src",
         "adj_factor_provider": "adj-src",
         "financial_data_provider": "fin-src",
+        "fund_flow_data_provider": "flow-src",
     }
     getter_names = {
         "realtime_data_provider": "get_realtime_data_provider",
@@ -298,6 +305,7 @@ def test_api_endpoint_injects_all_routing_preferences(monkeypatch):
         "depth5_data_provider": "get_depth5_data_provider",
         "adj_factor_provider": "get_adj_factor_provider",
         "financial_data_provider": "get_financial_provider",
+        "fund_flow_data_provider": "get_fund_flow_provider",
     }
     for field, getter in getter_names.items():
         monkeypatch.setattr(preferences, getter, lambda f=field: getter_values[f])

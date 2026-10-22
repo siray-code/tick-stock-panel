@@ -11,6 +11,7 @@ const CAPS: Pick<CapabilityRoute, 'id' | 'field'>[] = [
   { id: 'depth5', field: 'depth5_data_provider' },
   { id: 'financial', field: 'financial_data_provider' },
   { id: 'full_minute', field: 'full_minute_data_provider' },
+  { id: 'fund_flow', field: 'fund_flow_data_provider' },
 ]
 
 const ALL_FIELDS: ProviderField[] = [
@@ -21,6 +22,7 @@ const ALL_FIELDS: ProviderField[] = [
   'depth5_data_provider',
   'financial_data_provider',
   'full_minute_data_provider',
+  'fund_flow_data_provider',
 ]
 
 const DEMO = 'demo_source'
@@ -81,8 +83,9 @@ describe('buildProviderRouting', () => {
     expect(Object.keys(routing).sort()).toEqual([...ALL_FIELDS].sort())
   })
 
-  it('默认路由覆盖全部字段且均为 tickflow', () => {
+  it('默认路由覆盖全部字段，资金流使用独立默认源', () => {
     expect(Object.keys(DEFAULT_ROUTING).sort()).toEqual([...ALL_FIELDS].sort())
-    expect(new Set(Object.values(DEFAULT_ROUTING))).toEqual(new Set(['tickflow']))
+    expect(DEFAULT_ROUTING.fund_flow_data_provider).toBe('akshare_ths')
+    expect(new Set(Object.entries(DEFAULT_ROUTING).filter(([k]) => k !== 'fund_flow_data_provider').map(([, v]) => v))).toEqual(new Set(['tickflow']))
   })
 })

@@ -54,6 +54,7 @@ const DATASET_LABEL: Record<string, string> = {
   depth5: '五档',
   financial: '财务',
   full_minute: '全量分钟',
+  fund_flow: '资金流',
 }
 
 /** 能力图标 (纯展示; 能力清单本身由后端注册表驱动) */
@@ -67,7 +68,8 @@ const CAP_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
 }
 
 /** TickFlow 档位要求文本: none → 全档位, 其余 → starter+ 形式 */
-function tierReqText(tier: string): string {
+function tierReqText(tier: string | null): string {
+  if (tier == null) return '未提供'
   return tier === 'none' ? '全档位' : `${tier}+`
 }
 
@@ -624,19 +626,11 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
 
   const selectedCustom = customList.find(s => s.name === selected)
 
-  // ===== 各能力当前的有效提供方 (除权 same_as_daily = 跟随日K) =====
+  // ===== 各能力当前的有效提供方 (统一取能力矩阵，避免新增能力漏接) =====
   // 用于能力芯片"服务中"态与详情卡标识: 路由切换在上方能力路由区, 这里只读展示
-  const dailyPref = prefs.data?.daily_data_provider || 'tickflow'
-  const adjPref = prefs.data?.adj_factor_provider || 'same_as_daily'
-  const effProvider: Record<string, string> = {
-    daily: dailyPref,
-    adj_factor: adjPref === 'same_as_daily' ? dailyPref : adjPref,
-    minute: prefs.data?.minute_data_provider || 'tickflow',
-    full_minute: prefs.data?.full_minute_data_provider || 'tickflow',
-    realtime: prefs.data?.realtime_data_provider || 'tickflow',
-    depth5: prefs.data?.depth5_data_provider || 'tickflow',
-    financial: prefs.data?.financial_data_provider || 'tickflow',
-  }
+  const effProvider: Record<string, string> = Object.fromEntries(
+    (matrix.data?.capabilities ?? []).map(cap => [cap.id, cap.effective]),
+  )
   const servingDatasets = (name: string) =>
     Object.entries(effProvider).filter(([, v]) => v === name).map(([k]) => k)
   const servingSetOf = (name: string) => new Set(servingDatasets(name))
@@ -786,9 +780,9 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
             const installing = installMut.isPending && installMut.variables === item.name
             const uninstalling = uninstallMut.isPending && uninstallMut.variables === item.name
             const declared = new Set(item.datasets)
-            // TickFlow 展示注册表全量能力 (含档位锁定态); 其余源按声明过滤
+            // TickFlow 只展示自身提供的能力 (含档位锁定态); 其余源按声明过滤
             const chipCaps = isTf
-              ? matrixCaps
+              ? matrixCaps.filter(c => c.tf_tier != null)
               : matrixCaps.filter(c => declared.has(c.id))
             return (
               <div
@@ -1124,7 +1118,7 @@ function PluginDetail({ plugin, isActive, matrixCaps, servingSet }: {
 /** TickFlow 详情: 介绍 + 能力档位表 + Key/可用功能左右两栏。
  *  检测档位集群 (档位徽章 + ? 说明 + 重新检测 + 可用功能悬停) 挂在 API Key 标题行右侧。 */
 function TickFlowDetail({ active, matrix }: { active: boolean; matrix?: CapabilityMatrix }) {
-  const caps = matrix?.capabilities ?? []
+  const caps = (matrix?.capabilities ?? []).filter(c => c.tf_tier != null)
   const tier = matrix?.tickflow_tier
   const { data: tfCaps } = useCapabilities()
   const capEntries = tfCaps ? Object.entries(tfCaps.capabilities) : []
@@ -1231,7 +1225,7 @@ function TickFlowDetail({ active, matrix }: { active: boolean; matrix?: Capabili
                       <span className="text-xs text-foreground">{cap.label}</span>
                       <span className="ml-1.5 text-[10px] text-muted/60">{cap.desc}</span>
                     </div>
-                    <TierReqChip tier={cap.tf_tier} currentLabel={tier} />
+                    <TierReqChip tier={cap.tf_tier!} currentLabel={tier} />
                     {cap.tf_available ? (
                       <span className="w-[52px] text-right text-[10px] text-bear inline-flex items-center justify-end gap-0.5 shrink-0">
                         <Check className="h-2.5 w-2.5" />可用
