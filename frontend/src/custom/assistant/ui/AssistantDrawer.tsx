@@ -598,7 +598,7 @@ function InputArea({ sending, blocked }: { sending: boolean; blocked: boolean })
         )}
       </div>
       <div className="mt-1.5 px-1 text-[10px] text-muted">
-        ⌘K / Ctrl+K 呼出 · 左缘可拖拽调宽 · 回答基于本地数据, 不构成投资建议
+        ⌘K / Ctrl+K 呼出 · 左缘可拖拽调宽 · 回答基于本地数据, 请核对日期与判断条件
       </div>
     </div>
   )
