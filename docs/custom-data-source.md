@@ -16,6 +16,8 @@
 | 全量分钟 | `full_minute` | 与 `minute` 同形;声明后可被路由为「全量分钟」生效源,内置服务盘中按当日窗口全市场批量落盘(仅修复轮语义,节奏下限 60s) |
 | 财务数据 | `financial` | 一个配置覆盖全部五张财务表;请求时注入 `table` 参数由上游分发,五表按报告期累积落库(见下 `financial` 字段契约) |
 
+分钟数据源隔离：显式选择自定义 `minute` / `full_minute` 源后，缺少对应数据集、插件失效、请求失败或时间戳无法归一时，本轮停止取数，不自动改用 TickFlow。已保存但未加载的数据源也不会被视为 TickFlow。相关接口返回空结果或不可用状态，日志记录当前源错误；请恢复该源或在设置中明确切换来源。此规则不改变日 K 的指数/ETF 空结果回退约定。
+
 `full_minute` 声明式源只提供修复轮(当日窗口批量);廉价增量端点
 (`get_intraday_latest`)是 Python 插件契约,见
 [plugin-development.md](./plugin-development.md)。

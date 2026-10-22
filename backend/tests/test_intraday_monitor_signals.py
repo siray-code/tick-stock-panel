@@ -149,6 +149,7 @@ def test_intraday_rule_rejects_non_symbol_scope():
 
 
 def test_intraday_support_uses_capability_limits(monkeypatch):
+    monkeypatch.setattr("app.services.preferences.load", lambda: {})
     monkeypatch.setattr("app.services.preferences.get_minute_data_provider", lambda: "tickflow")
     capset = CapabilitySet({Cap.KLINE_MINUTE_BATCH: CapabilityLimits(batch=25, rpm=30)})
     support = intraday_monitor_support(capset)
@@ -161,6 +162,7 @@ def test_intraday_support_uses_capability_limits(monkeypatch):
 
 
 def test_intraday_batch_provider_is_normalized_without_network(monkeypatch):
+    monkeypatch.setattr("app.services.preferences.load", lambda: {})
     monkeypatch.setattr("app.services.preferences.get_minute_data_provider", lambda: "tickflow")
 
     class FakeKlines:

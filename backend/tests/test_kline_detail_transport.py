@@ -19,6 +19,7 @@ _TRADE_DATE = date(2026, 1, 15)
 
 @pytest.fixture(autouse=True)
 def _isolated_settings_and_clock(monkeypatch):
+    monkeypatch.setattr("app.services.preferences.load", lambda: {})
     monkeypatch.setattr("app.services.preferences.get_daily_batch_compress", lambda: True)
     monkeypatch.setattr("app.services.preferences.get_minute_batch_compress", lambda: True)
     monkeypatch.setattr(kline, "cn_today", lambda: _TRADE_DATE)
@@ -165,6 +166,7 @@ def test_free_tier_skips_tickflow_minute_fallback(monkeypatch, live):
 
 def test_custom_minute_source_remains_available_without_tickflow_capability(monkeypatch):
     provider = MagicMock()
+    provider.config.datasets = {"minute": object()}
     provider.get_minute.return_value = _minute_rows(1)
     monkeypatch.setattr("app.services.preferences.get_minute_data_provider", lambda: "custom")
     monkeypatch.setattr(
@@ -187,6 +189,7 @@ def test_custom_minute_source_remains_available_without_tickflow_capability(monk
 
 def test_failed_custom_source_does_not_fall_back_to_unsupported_tickflow(monkeypatch):
     provider = MagicMock()
+    provider.config.datasets = {"minute": object()}
     provider.get_minute.side_effect = RuntimeError("custom source unavailable")
     monkeypatch.setattr("app.services.preferences.get_minute_data_provider", lambda: "custom")
     monkeypatch.setattr(

@@ -58,6 +58,7 @@ def _capture_minute_window(monkeypatch, tmp_path, local_dt: datetime, **kwargs) 
         captured.update(call_kwargs)
         return pl.DataFrame()
 
+    monkeypatch.setattr(kline_sync.preferences, "load", lambda: {})
     monkeypatch.setattr(kline_sync.preferences, "get_minute_data_provider", lambda: "tickflow")
     monkeypatch.setattr(kline_sync.preferences, "get_minute_sync_segment_days", lambda: 20)
     monkeypatch.setattr(kline_sync, "_cleanup_null_datetime_minute", lambda repo: None)
