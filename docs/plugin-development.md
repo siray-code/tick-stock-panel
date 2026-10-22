@@ -190,6 +190,9 @@ class MyProvider:
 `timestamp` 为毫秒 Unix 时间戳。服务层按 capability 的 `batch` / `rpm` 统一分片限速,
 provider 不应自行切换或回退到其他数据源。
 
+五档数组必须保留档位位置：有效空档的数量为 `0`，未知数量为 `None`，不能删除空档或把未知量伪装成零。
+上游按股提供委托量时应除以 `100` 并保留零股小数，避免把不足一手的真实卖压转换成零而误判封板。
+
 ```python
 {
     "600519.SH": {
@@ -311,6 +314,10 @@ uv run --extra dev python -m ruff check app/plugins/<your_plugin>/ tests/test_<y
 
 ## 现有插件参考
 
+- **`backend/app/plugins/free_cn/`** — 新浪免费公开行情，使用已有 httpx，无需 Key。
+  提供 `adj_factor/realtime/minute/depth5/full_minute`；实时股票由 Market_Center 枚举，再批量获取带日期时间的同源报价；指数按需补拉，量额暂空，不覆盖 ETF 全市场快照。
+  分钟最多 1023 根、声明 `minute_history_days = 4`，成交额为空，仅实现当日全量分钟修复轮。实时建议间隔至少 60 秒，全市场分钟逐标的取数仍需十几至几十分钟。
+  不声明日线和财务；不引入额外归档服务。`tests/test_free_cn_provider.py` 覆盖封板、报价时间、交易所身份、空值、失败隔离、分页及加载路由。
 - **`backend/app/plugins/fuyao/`** — 同花顺官方 REST 数据源(runtime: none, 纯 HTTP 零依赖)
   - 提供 `realtime`(A 股全市场快照, 分页拉取)、`daily`(原始价日K三档: 近端窗口走 daily-k-10d dump, 深窗口走 daily-k 10 年全量 dump(172MB 一次下载、缓存复用、10d 补尾), 兜底单标的接口按 10 年自动分片)、`adj_factor`(事件 dump + 前收盘价从本地日K dump 一次取齐、缺价标的回退单标的接口, 按交易所公式推导单事件比值, 涨跌停自检; 全市场配价从逐标的 ~13 分钟降为秒级); Key 在设置页卡片直接配置(先探后存), 或 `.env` 配 `FUYAO_API_KEY`
   - `client.py` — httpx 客户端(X-api-key 认证 + 统一信封解包 + 分页 + 页间隔限频 + 单标的日K + dump 预签名下载, S3 下载不带 Key 头)

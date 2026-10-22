@@ -23,6 +23,7 @@ import { storage } from '@/lib/storage'
 import { navItemKey, type NavItem } from '@/lib/listNav'
 import { useListNav } from '@/lib/useListNav'
 import { DEFAULT_INTRADAY_DAYS } from '@/lib/kline'
+import { INTRADAY_DAY_OPTIONS, intradayDayChoices } from '@/lib/intraday-days'
 import { ExtensionSlot } from '@/extensions/ExtensionSlot'
 
 export interface Props {
@@ -57,7 +58,6 @@ interface PriceAlertDraft {
   targetPrice: number
   currentPrice: number
 }
-const INTRADAY_DAY_OPTIONS = [1, 5, 10, 20] as const
 
 function loadIntradayDays(): number {
   const saved = storage.stockPreviewIntradayDays.get(DEFAULT_INTRADAY_DAYS)
@@ -213,17 +213,17 @@ export function StockPreviewDialogContent({ symbol, name, onClose, triggerInfo, 
   // 分时档位按分钟源历史深度收窄: 浅源(如仅 5 日)只显示可行档位、默认 5日;
   // 深源(tickflow/未声明)全档位、默认 20日。用户已保存的可行选择优先保留。
   const minuteHistoryDays = prefs?.minute_history_days ?? null
-  const dayOptions = useMemo<number[]>(
-    () => INTRADAY_DAY_OPTIONS.filter(d => minuteHistoryDays == null || d <= minuteHistoryDays),
+  const { options: dayOptions, defaultDays: defaultIntradayDays } = useMemo(
+    () => intradayDayChoices(minuteHistoryDays),
     [minuteHistoryDays],
   )
-  const defaultIntradayDays = minuteHistoryDays != null && minuteHistoryDays < 20 ? 5 : 20
-  const effectiveIntradayDays = intradayDays ?? defaultIntradayDays
+  const effectiveIntradayDays = intradayDays != null && dayOptions.some(d => d === intradayDays)
+    ? intradayDays : defaultIntradayDays
   useEffect(() => {
-    if (!dayOptions.includes(effectiveIntradayDays)) {
+    if (intradayDays !== effectiveIntradayDays) {
       setIntradayDays(defaultIntradayDays)
     }
-  }, [dayOptions, effectiveIntradayDays, defaultIntradayDays])
+  }, [intradayDays, effectiveIntradayDays, defaultIntradayDays])
 
   const handleRefresh = () => {
     if (!symbol) return

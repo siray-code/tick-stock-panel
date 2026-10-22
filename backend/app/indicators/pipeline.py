@@ -1042,7 +1042,8 @@ def filter_halt_days(df: pl.DataFrame) -> pl.DataFrame:
         return df
     halted = (pl.col("open") == 0) & (pl.col("high") == 0)
     if "volume" in df.columns and "amount" in df.columns:
-        halted = halted | ((pl.col("volume") == 0) & (pl.col("amount") == 0))
+        # 缺量额不等于停牌；nullable 指数快照仍有合法 OHLC。
+        halted = halted | ((pl.col("volume") == 0) & (pl.col("amount") == 0)).fill_null(False)
     return df.filter(~halted)
 
 

@@ -1,0 +1,19 @@
+# free_cn — 免费开源源 (全部新浪)
+# 纯 HTTP，仅使用后端已有的 httpx，无需 API Key。
+# 未声明 daily：日线不提供成交额，继续由用户独立选择的日线源提供。
+
+name: free_cn
+display_name: "免费开源源 (新浪)"
+runtime: none
+entry: app.plugins.free_cn.provider:FreeCnProvider
+check: app.plugins.free_cn.provider:availability
+datasets: [adj_factor, realtime, minute, depth5, full_minute]
+description: "新浪免费公开行情：除权因子、A 股实时快照、1 分钟K、五档盘口及全量分钟修复轮。实时价格和时间取批量报价；分钟深度约 4 个交易日，不提供 ETF 全市场实时快照。日线、财务由其他源独立提供。"
+usage_notes:
+  - "除权因子：按标的获取 hfq.js 累积因子，转换为单事件 ex_factor；用未复权日线配前收盘，不缓存全市场日线历史。"
+  - "实时快照：Market_Center 100 只/页枚举股票，再按 100 只/批取有日期时间的报价；建议轮询间隔至少 60 秒。指数按需单独补拉，指数成交量额暂为空。"
+  - "1 分钟K：单标的最多 1023 根，声明 4 个交易日；按请求时间窗口过滤，覆盖不足记告警，不承诺长历史回补。成交额为空。"
+  - "五档盘口：100 只/请求，股÷100 转手且保留零股和空档；仅实时，无历史。"
+  - "全量分钟：仅当日修复轮，无廉价增量端点；服务节奏下限 60 秒，全市场逐标的拉取仍需十几至几十分钟。"
+install_hint: "无需安装: 纯 HTTP, 仅用后端已有的 httpx"
+homepage: "https://finance.sina.com.cn"

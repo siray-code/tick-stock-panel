@@ -389,8 +389,9 @@ class DepthService:
             "symbol": pl.Utf8,
             "sealed_up": pl.Boolean,
             "sealed_down": pl.Boolean,
-            "ask1_vol": pl.Int64,
-            "bid1_vol": pl.Int64,
+            # 手口径允许零股小数；旧整数文件仍由通用读取路径兼容。
+            "ask1_vol": pl.Float64,
+            "bid1_vol": pl.Float64,
             "status": pl.Utf8,
             "fetched_at": pl.Float64,
         })
@@ -420,7 +421,7 @@ class DepthService:
 
         优先内存缓存(盘中), 回退 parquet(历史/盘后)。
         sealed: bool | None (None=待确认或降级)
-        vol: 封单量(int) | None
+        vol: 封单量(手，允许小数) | None
         ready: sealed 数据是否就绪(False→降级标识)
         age: 距上次拉取秒数(盘后定版为 None)
         """
