@@ -8,6 +8,7 @@ Starter+ 盘后可用 quotes.get(universes) 顺便补充 name。
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date
 from pathlib import Path
 
@@ -19,6 +20,11 @@ from app.tickflow.client import get_client
 logger = logging.getLogger(__name__)
 
 _EXCHANGES = ["SH", "SZ", "BJ"]
+_EXCHANGE_RETRIES = 2
+
+
+class InstrumentSyncIncompleteError(RuntimeError):
+    """A full-market instrument snapshot could not be fetched completely."""
 
 
 def _flatten_instruments(items: list[dict]) -> list[dict]:
@@ -72,24 +78,49 @@ def _fetch_instruments_via_provider() -> list[dict] | None:
     return rows
 
 
+def _fetch_all_exchanges_tickflow() -> tuple[list[dict], list[str]]:
+    """逐交易所拉取并重试, 返回标准化行和失败交易所。"""
+    tf = get_client()
+    all_rows: list[dict] = []
+    failed: list[str] = []
+    for ex in _EXCHANGES:
+        items = None
+        last_error: Exception | None = None
+        for attempt in range(_EXCHANGE_RETRIES + 1):
+            try:
+                items = tf.exchanges.get_instruments(ex, instrument_type="stock")
+                if items:
+                    break
+                last_error = ValueError("交易所返回空标的列表")
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+            if attempt < _EXCHANGE_RETRIES:
+                time.sleep(3 * (attempt + 1))
+        if items:
+            all_rows.extend(_flatten_instruments(items))
+            logger.info("instruments %s: %d stocks", ex, len(items))
+        else:
+            failed.append(ex)
+            logger.error("get_instruments(%s) 重试后仍失败: %s", ex, last_error)
+    return all_rows, failed
+
+
 def sync_instruments(data_dir: Path) -> int:
     """全量同步标的维表 → data/instruments/instruments.parquet。
 
-    返回写入的行数。
+    返回写入行数。TickFlow 任一交易所失败(含空响应)则抛
+    InstrumentSyncIncompleteError,保留旧表;首次同步也不发布残缺维表。
     """
     all_rows = _fetch_instruments_via_provider()
     if all_rows is None:
         # 未命中非 tickflow provider → 走 tickflow 直连
-        tf = get_client()
-        all_rows = []
-        for ex in _EXCHANGES:
-            try:
-                items = tf.exchanges.get_instruments(ex, instrument_type="stock")
-                if items:
-                    all_rows.extend(_flatten_instruments(items))
-                    logger.info("instruments %s: %d stocks", ex, len(items))
-            except Exception as e:
-                logger.warning("get_instruments(%s) failed: %s", ex, e)
+        all_rows, failed_exchanges = _fetch_all_exchanges_tickflow()
+        if failed_exchanges:
+            # 不能返回 0 或写首建残表: 调用方会把正常返回当成同步成功。
+            raise InstrumentSyncIncompleteError(
+                f"个股维表同步不完整(缺 {','.join(failed_exchanges)}),"
+                "未写入新数据;已有维表保持不变,请稍后重试"
+            )
 
     if not all_rows:
         return 0
