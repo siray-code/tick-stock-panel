@@ -170,17 +170,7 @@ export function Auth() {
               <p>
                 出于安全考虑, 首次设置密码需在服务器本机或内网访问时操作。公网环境下仅可登录。
               </p>
-              <p>
-                详细配置说明见{' '}
-                <a
-                  href="https://github.com/shy3130/tickflow-stock-panel/blob/main/docs/deploy-password.md"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-accent underline-offset-2 hover:underline"
-                >
-                  访问密码部署文档
-                </a>
-              </p>
+              <p>详细配置说明见部署目录中的 docs/deploy-password.md。</p>
             </div>
           )}
         </div>
